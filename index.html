@@ -67,8 +67,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-o
           <li><i style="background:#b9b0dc"></i>เงียบ หรือเสียงเบา<span>ฮีโร่หยุดเดิน</span></li>
           <li><i style="background:#3ddc97"></i>พูดหรือร้องเสียงปกติ<span>ฮีโร่เดินหน้า</span></li>
           <li><i style="background:#ff7a59"></i>ตะโกนดังๆ<span>ฮีโร่กระโดด</span></li>
+          <li><i style="background:#ffd166"></i>ก่อนเริ่มเล่นแต่ละรอบ<span>หัก 1 SMOON</span></li>
         </ul>
-        <button id="ovBtn">เริ่มเล่น</button>
+        <button id="ovBtn">เริ่มเล่น (เสีย 1 SMOON)</button>
         <button id="initialBtn" style="margin-top:10px">
         รับ 10 SMOON ครั้งแรก
         </button>
@@ -138,8 +139,8 @@ function readRms() {
 /* ---------- กระเป๋า MetaMask ---------- */
 const connectBtn = $('connectBtn'), addrEl = $('addr');
 
-const GAME_CONTRACT = "0x0000000000000000000000000000000000000000";
-const SMOON_CONTRACT = "0x0000000000000000000000000000000000000000";
+const GAME_CONTRACT = "0x4B83b698F23331b27154104385D9404B8FCa6C8e";
+const SMOON_CONTRACT = "0x4Ebfbd80652866869CcCDCe1Af03d00cc3B8dD01";
 const BSC_TESTNET_CHAIN_ID = '0x61';
 
 /*
@@ -148,9 +149,18 @@ const BSC_TESTNET_CHAIN_ID = '0x61';
 */
 const SELECTOR = {
   claimInitial: '0x07bb0a22',
-  claimReward: '0xae169a50',
-  hasClaimedInitial: '0x2be5def2'
+  claimReward: '0xb88a802f',
+  hasClaimedInitial: '0x2be5def2',
+  rewards: '0x0700037d',
+  addReward: '0x9feb8f50',
+  owner: '0x8da5cb5b',
+  // ERC-20 มาตรฐานของโทเคน SMOON ใช้สำหรับ "จ่าย 1 SMOON ก่อนเล่น" โอนตรงจากผู้เล่นไปยัง GAME_CONTRACT
+  transfer: '0xa9059cbb',
+  balanceOf: '0x70a08231'
 };
+// สมมติว่า SMOON ใช้ 18 ตำแหน่งทศนิยมตามมาตรฐาน ERC-20 ทั่วไป ถ้าโทเคนจริงใช้ทศนิยมต่างจากนี้ ให้แก้เลขนี้
+const SMOON_DECIMALS = 18;
+const PLAY_COST = 10n ** BigInt(SMOON_DECIMALS); // = 1 SMOON
 
 let provider = null;
 let signer = null;
@@ -163,6 +173,10 @@ function encodeAddress(address) {
 
 function encodeUint(value) {
   return BigInt(value).toString(16).padStart(64, '0');
+}
+
+function encodeAddReward(player, amount) {
+  return SELECTOR.addReward + encodeAddress(player) + encodeUint(amount);
 }
 
 function decodeUint(hex) {
@@ -202,13 +216,37 @@ async function callGame(data) {
   return rpc('eth_call', [{ to: GAME_CONTRACT, data }, 'latest']);
 }
 
-async function sendGame(data) {
+async function sendGame(data, gas) {
   if (!account) throw new Error('กรุณา Connect Wallet ก่อน');
-  return rpc('eth_sendTransaction', [{
-    from: account,
-    to: GAME_CONTRACT,
-    data: data
-  }]);
+  const tx = { from: account, to: GAME_CONTRACT, data: data };
+  if (gas) tx.gas = gas;
+  return rpc('eth_sendTransaction', [tx]);
+}
+
+async function callToken(data) {
+  return rpc('eth_call', [{ to: SMOON_CONTRACT, data }, 'latest']);
+}
+async function sendToken(data, gas) {
+  if (!account) throw new Error('กรุณา Connect Wallet ก่อน');
+  const tx = { from: account, to: SMOON_CONTRACT, data: data };
+  if (gas) tx.gas = gas;
+  return rpc('eth_sendTransaction', [tx]);
+}
+
+/* จ่าย 1 SMOON ก่อนเริ่มเกม: โอนตรงจากผู้เล่นไปยัง GAME_CONTRACT ด้วย transfer() ธุรกรรมเดียว */
+async function payToPlay() {
+  await ensureBlockchain();
+
+  const balanceRaw = await callToken(SELECTOR.balanceOf + encodeAddress(account));
+  const balance = decodeUint(balanceRaw);
+  if (balance < PLAY_COST) {
+    throw new Error('ยอด SMOON ไม่พอ ต้องมีอย่างน้อย 1 SMOON จึงจะเริ่มเล่นได้');
+  }
+
+  const data = SELECTOR.transfer + encodeAddress(GAME_CONTRACT) + encodeUint(PLAY_COST);
+  // กำหนด gas limit ตายตัว เพื่อไม่ให้ MetaMask บล็อกปุ่มยืนยันจากการประเมิน gas อัตโนมัติ
+  const txHash = await sendToken(data, '0x30d40'); // 200000
+  await waitForTransaction(txHash);
 }
 
 async function waitForTransaction(txHash) {
@@ -263,10 +301,6 @@ async function initBlockchain() {
 }
 
 async function ensureBlockchain() {
-
-  if (GAME_CONTRACT === "0x0000000000000000000000000000000000000000" || SMOON_CONTRACT === "0x0000000000000000000000000000000000000000") {
-    throw new Error('ยังไม่ได้ตั้งค่า Contract Address: แก้ GAME_CONTRACT และ SMOON_CONTRACT ใน index.html ก่อนใช้ระบบรางวัล');
-  }
   if (!window.ethereum) throw new Error('ไม่พบ MetaMask กรุณาติดตั้งส่วนขยายก่อน');
 
   const accounts = await rpc('eth_accounts');
@@ -378,6 +412,28 @@ if (window.ethereum) {
 /* ---------- ควบคุมเกม ---------- */
 async function begin() {
   msg.textContent = '';
+  ovBtn.disabled = true;
+
+  try {
+    if (!account) {
+      msg.textContent = 'กำลังเชื่อมต่อ Wallet...';
+      await connectWallet();
+      if (!account) { ovBtn.disabled = false; return; }
+    }
+    msg.textContent = 'กำลังหัก 1 SMOON เพื่อเริ่มเล่น กรุณายืนยัน Transaction ใน MetaMask...';
+    await payToPlay();
+    msg.textContent = 'จ่าย 1 SMOON สำเร็จ เริ่มเกมได้เลย';
+  } catch (e) {
+    console.log(e);
+    const text = errorText(e);
+    msg.textContent = (e?.code === 4001 || text.toLowerCase().includes('user rejected'))
+      ? 'ยกเลิกการจ่าย SMOON จึงยังเริ่มเกมไม่ได้'
+      : 'จ่าย SMOON ไม่สำเร็จ: ' + (text || 'ลองใหม่อีกครั้ง');
+    ovBtn.disabled = false;
+    return;
+  }
+  ovBtn.disabled = false;
+
   if (!micOn) {
     try { await startMic(); }
     catch (e) {
@@ -465,49 +521,70 @@ initialBtn.onclick = async () => {
 
 ovBtn.onclick = begin;
 
-/* ---------- Claim Reward: 1 Transaction ---------- */
+/*
+  Reward:
+  - Account Owner สามารถบันทึก Reward ตามคะแนนด้วย addReward()
+  - Wallet ผู้เล่นทั่วไปจะ Claim ได้เมื่อ Reward ถูกบันทึกไว้ใน Contract แล้ว
+*/
+async function sendReward() {
+  await ensureBlockchain();
+
+  const ownerRaw = await callGame(SELECTOR.owner);
+  const owner = '0x' + ownerRaw.slice(-40);
+  const isOwner = owner.toLowerCase() === account.toLowerCase();
+
+  if (!isOwner) return false;
+
+  const amount = BigInt(gameReward) * 1000000000000000000n;
+  if (amount <= 0n) throw new Error('คะแนนเป็น 0 จึงไม่มี Reward');
+
+  const txHash = await sendGame(encodeAddReward(account, amount));
+  await waitForTransaction(txHash);
+  return true;
+}
+
 claimBtn.onclick = async () => {
   try {
     claimBtn.disabled = true;
     skipBtn.disabled = true;
-    rewardMsg.textContent = 'กำลังเตรียม Claim Reward...';
+    rewardMsg.textContent = 'กำลังตรวจสอบ Wallet...';
 
     await ensureBlockchain();
 
-    const scoreToClaim = Number(gameReward);
-    if (!Number.isInteger(scoreToClaim) || scoreToClaim <= 0) {
-      throw new Error('คะแนนเป็น 0 จึงไม่มี Reward');
-    }
-    if (scoreToClaim > 100) {
-      throw new Error('คะแนนเกิน 100');
+    let currentReward = decodeUint(await callGame(SELECTOR.rewards + encodeAddress(account)));
+
+    if (currentReward === 0n) {
+      const addedByOwner = await sendReward();
+      if (!addedByOwner) throw new Error('No reward');
+      currentReward = decodeUint(await callGame(SELECTOR.rewards + encodeAddress(account)));
     }
 
-    // claimReward(uint256 score) เป็นธุรกรรมเดียว
-    const data = SELECTOR.claimReward + encodeUint(scoreToClaim);
+    if (currentReward === 0n) throw new Error('No reward');
 
     rewardMsg.textContent = 'กำลังส่ง Transaction Claim Reward...';
-    // ไม่กำหนด gas เอง ให้ MetaMask ประเมิน gas limit จาก transaction จริง
-    const txHash = await sendGame(data);
+    const txHash = await sendGame(SELECTOR.claimReward);
     await waitForTransaction(txHash);
 
-    rewardMsg.textContent = 'Claim สำเร็จ! ได้รับ ' + scoreToClaim + ' SMOON แล้ว';
-    setTimeout(() => goHome(), 1200);
+    rewardMsg.textContent = 'Claim สำเร็จ! ได้รับ Reward แล้ว';
+
+    setTimeout(() => {
+      goHome();
+    }, 1200);
   } catch (err) {
     console.log(err);
+
     const text = errorText(err);
-    if (text.includes('Contract reward balance too low')) {
-      rewardMsg.textContent = 'Claim ไม่สำเร็จ: SMOON ใน Contract ไม่พอสำหรับรางวัล';
-    } else if (text.includes('Score must be greater than 0')) {
-      rewardMsg.textContent = 'คะแนนเป็น 0 จึงไม่มี Reward';
-    } else if (text.includes('Score too high')) {
-      rewardMsg.textContent = 'คะแนนเกินกำหนดของ Contract';
-    } else if (text.toLowerCase().includes('gas limit too high')) {
-      rewardMsg.textContent = 'RPC ปฏิเสธ Gas Limit ที่ MetaMask ประเมิน';
+
+    if (text.includes('No reward')) {
+      rewardMsg.textContent = 'ยังไม่มี Reward สำหรับ Wallet นี้';
+    } else if (text.includes('Not owner')) {
+      rewardMsg.textContent = 'Wallet นี้ไม่ใช่ Owner จึงเพิ่ม Reward จากคะแนนเองไม่ได้';
     } else if (err?.code === 4001 || text.toLowerCase().includes('user rejected')) {
       rewardMsg.textContent = 'ยกเลิก Transaction';
     } else {
       rewardMsg.textContent = 'Claim ไม่สำเร็จ: ' + (text || 'ลองใหม่อีกครั้ง');
     }
+
     claimBtn.disabled = false;
     skipBtn.disabled = false;
   }
@@ -529,7 +606,7 @@ function goHome() {
   ovText.textContent = 'ใช้เสียงของคุณบังคับฮีโร่ให้วิ่งข้ามสิ่งกีดขวางให้ได้ไกลที่สุด';
   how.style.display = '';
   ovBtn.style.display = '';
-  ovBtn.textContent = 'เริ่มเล่น';
+  ovBtn.textContent = 'เริ่มเล่น (เสีย 1 SMOON)';
   initialBtn.style.display = '';
   delete skipBtn.dataset.confirm;
   rewardBox.style.display = 'none';
