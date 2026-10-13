@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scream to Moon - เกมใช้เสียงบังคับฮีโร่</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--night:#1b1740;--plum:#4a2a6b;--coral:#ff7a59;--sun:#ffd166;--mint:#3ddc97;--ink:#f6f1ff;--dim:#b9b0dc}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--night);color:var(--ink);font-family:'Kanit',system-ui,sans-serif;display:flex;justify-content:center;align-items:center;padding:12px}
+.app{width:min(100%,900px)}
+.stage{position:relative;border-radius:20px;overflow:hidden;box-shadow:0 14px 40px #0009}
+canvas{display:block;width:100%;height:auto}
+#ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(27,23,64,.84);padding:16px;text-align:center}
+#ov.hide{display:none}
+.card{max-width:460px}
+h1{margin:0 0 6px;font-size:clamp(30px,6vw,46px);font-weight:800;color:var(--sun);letter-spacing:.5px}
+#ovText{margin:0 0 14px;color:var(--dim);font-size:clamp(15px,2.6vw,18px)}
+.how{list-style:none;margin:0 auto 16px;padding:0;display:grid;gap:8px;text-align:left}
+.how li{display:flex;align-items:center;gap:12px;background:#ffffff14;border-radius:12px;padding:8px 14px;font-size:16px}
+.how i{width:12px;height:12px;border-radius:50%;flex:none}
+.how span{color:var(--dim);margin-left:auto}
+button{font:inherit;font-weight:600;font-size:20px;color:var(--night);background:var(--sun);border:0;border-radius:14px;padding:12px 34px;cursor:pointer}
+button:hover{background:#ffe09a}
+button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+#msg{display:block;margin-top:12px;color:var(--coral);font-size:14px;min-height:1em}
+.panel{margin-top:12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.meter{flex:1 1 300px}
+.bar{position:relative;height:22px;background:#ffffff1a;border-radius:11px;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--dim);border-radius:11px}
+.bar i.walk{background:var(--mint)}
+.bar i.jump{background:var(--coral)}
+.bar b{position:absolute;top:0;bottom:0;width:2px;background:#fff9}
+.state{margin-top:6px;font-size:17px;font-weight:600}
+.tools{font-size:15px;color:var(--dim)}
+.tools input{vertical-align:middle;width:140px;accent-color:var(--sun)}
+.keys{width:100%;font-size:13px;color:var(--dim);margin:0}
+.wallet{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.wallet button{font-size:16px;padding:8px 20px;border-radius:12px}
+.wallet button:disabled{background:var(--mint);cursor:default}
+#addr{font-size:15px;color:var(--mint);font-weight:600;word-break:break-all}
+#addr.off{color:var(--dim);font-weight:400}
+#rewardBox{display:none;margin-top:14px;padding:12px 14px;border:1px solid #ffffff22;border-radius:14px;background:#ffffff08}
+#rewardScore{font-size:18px;font-weight:700;margin-bottom:4px}
+#rewardAmount{font-size:24px;font-weight:800;color:var(--mint)}
+.rewardBtns{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.rewardBtns button{font-size:16px;padding:9px 18px}
+#claimBtn{background:var(--mint)}
+#skipBtn{background:#ffffff12;color:var(--ink);border:1px solid #ffffff33}
+#rewardMsg{display:block;margin-top:8px;color:var(--dim);font-size:13px;min-height:1em}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="wallet">
+    <span id="addr" class="off">ยังไม่ได้เชื่อมต่อกระเป๋า</span>
+    <button id="connectBtn">Connect Wallet</button>
+  </div>
+  <div class="stage">
+    <canvas id="game" width="900" height="420" aria-label="พื้นที่เล่นเกม"></canvas>
+    <div id="ov">
+      <div class="card">
+        <h1 id="ovTitle">Scream to Moon</h1>
+        <p id="ovText">ใช้เสียงของคุณบังคับฮีโร่ให้วิ่งข้ามสิ่งกีดขวางให้ได้ไกลที่สุด</p>
+        <ul class="how" id="how">
+          <li><i style="background:#b9b0dc"></i>เงียบ หรือเสียงเบา<span>ฮีโร่หยุดเดิน</span></li>
+          <li><i style="background:#3ddc97"></i>พูดหรือร้องเสียงปกติ<span>ฮีโร่เดินหน้า</span></li>
+          <li><i style="background:#ff7a59"></i>ตะโกนดังๆ<span>ฮีโร่กระโดด</span></li>
+        </ul>
+        <button id="ovBtn">เริ่มเล่น</button>
+        <button id="initialBtn" style="margin-top:10px">
+        รับ 10 SMOON ครั้งแรก
+        </button>
+        <div id="rewardBox">
+          <div id="rewardScore">คะแนน: <span id="finalScore">0</span></div>
+          <div>รางวัล</div>
+          <div id="rewardAmount">0 SMOON</div>
+          <div class="rewardBtns">
+            <button id="claimBtn">Claim Reward</button>
+            <button id="skipBtn">ไม่รับรางวัล</button>
+          </div>
+          <small id="rewardMsg"></small>
+        </div>
+        <small id="msg"></small>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="meter">
+      <div class="bar"><i id="fill"></i><b style="left:18%"></b><b style="left:55%"></b></div>
+      <div class="state" id="state">เงียบ: หยุดอยู่</div>
+    </div>
+    <label class="tools">ความไวไมค์ <input type="range" id="sens" min="0.5" max="2.5" step="0.1" value="1"></label>
+  </div>
+</div>
+<script>
+  
+const cv = document.getElementById('game'), c = cv.getContext('2d');
+const W = 900, H = 420, GROUND = 340;
+const T_WALK = 0.18, T_JUMP = 0.55;
+const $ = id => document.getElementById(id);
+const ov = $('ov'), ovTitle = $('ovTitle'), ovText = $('ovText'), ovBtn = $('ovBtn'), how = $('how'), msg = $('msg');
+const fill = $('fill'), stateEl = $('state'), sens = $('sens');
+const rewardBox = $('rewardBox'), finalScore = $('finalScore'), rewardAmount = $('rewardAmount'), claimBtn = $('claimBtn'), skipBtn = $('skipBtn'), rewardMsg = $('rewardMsg');
+const initialBtn = $('initialBtn');
+
+let state = 'ready', level = 0, rms = 0, noise = 0.01;
+let micOn = false, calibrated = false, an, buf;
+let calibT = 0, calibSum = 0, calibN = 0;
+let dist = 0, passed = 0, score = 0, best = 0, obs = [], gap = 400, airSpeed = 0, moving = false;
+let gameReward = 0;
+const P = { x: 150, w: 40, h: 52, z: 0, vz: 0, ground: true };
+const stars = Array.from({ length: 36 }, (_, i) => ({ x: (i * 197) % W, y: (i * 61) % 170 + 10, r: (i % 3) * .5 + .7 }));
+try { best = +localStorage.getItem('shout_hero_best') || 0; } catch (e) {}
+
+/* ---------- ไมโครโฟน ---------- */
+async function startMic() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+  });
+  await ctx.resume();
+  const src = ctx.createMediaStreamSource(stream);
+  an = ctx.createAnalyser();
+  an.fftSize = 1024;
+  src.connect(an);
+  buf = new Float32Array(an.fftSize);
+  micOn = true;
+}
+function readRms() {
+  an.getFloatTimeDomainData(buf);
+  let s = 0;
+  for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+  return Math.sqrt(s / buf.length);
+}
+
+/* ---------- กระเป๋า MetaMask ---------- */
+const connectBtn = $('connectBtn'), addrEl = $('addr');
+
+const GAME_CONTRACT = "0x0000000000000000000000000000000000000000";
+const SMOON_CONTRACT = "0x0000000000000000000000000000000000000000";
+const BSC_TESTNET_CHAIN_ID = '0x61';
+
+/*
+  Blockchain ใช้ MetaMask RPC โดยตรง ไม่พึ่ง ethers.js
+  เพื่อป้องกันปัญหา "ethers is not defined" เมื่อเปิดไฟล์ HTML โดยตรง
+*/
+const SELECTOR = {
+  claimInitial: '0x07bb0a22',
+  claimReward: '0xae169a50',
+  hasClaimedInitial: '0x2be5def2'
+};
+
+let provider = null;
+let signer = null;
+let game = null;
+let account = null;
+
+function encodeAddress(address) {
+  return address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+}
+
+function encodeUint(value) {
+  return BigInt(value).toString(16).padStart(64, '0');
+}
+
+function decodeUint(hex) {
+  if (!hex || hex === '0x') return 0n;
+  return BigInt(hex);
+}
+
+function decodeBool(hex) {
+  return decodeUint(hex) !== 0n;
+}
+
+function decodeError(error) {
+  const data = error?.data || error?.error?.data || '';
+  if (typeof data !== 'string' || !data.startsWith('0x08c379a0')) return '';
+  try {
+    const hex = data.slice(10);
+    const offset = Number(BigInt('0x' + hex.slice(0, 64)));
+    const lengthPos = offset * 2;
+    const length = Number(BigInt('0x' + hex.slice(lengthPos, lengthPos + 64)));
+    const textHex = hex.slice(lengthPos + 64, lengthPos + 64 + length * 2);
+    return decodeURIComponent(textHex.replace(/(..)/g, '%$1'));
+  } catch (_) {
+    return '';
+  }
+}
+
+function errorText(error) {
+  return decodeError(error) || String(error?.reason || error?.shortMessage || error?.message || '');
+}
+
+async function rpc(method, params = []) {
+  if (!window.ethereum) throw new Error('ไม่พบ MetaMask กรุณาติดตั้งส่วนขยายก่อน');
+  return window.ethereum.request({ method, params });
+}
+
+async function callGame(data) {
+  return rpc('eth_call', [{ to: GAME_CONTRACT, data }, 'latest']);
+}
+
+async function sendGame(data) {
+  if (!account) throw new Error('กรุณา Connect Wallet ก่อน');
+  return rpc('eth_sendTransaction', [{
+    from: account,
+    to: GAME_CONTRACT,
+    data: data
+  }]);
+}
+
+async function waitForTransaction(txHash) {
+  for (let i = 0; i < 90; i++) {
+    const receipt = await rpc('eth_getTransactionReceipt', [txHash]);
+    if (receipt) {
+      if (receipt.status === '0x1') return receipt;
+      throw new Error('Transaction ไม่สำเร็จ');
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error('รอ Transaction นานเกินไป กรุณาตรวจสอบใน MetaMask');
+}
+
+function showConnectedAddress(a) {
+  account = a ? a.toLowerCase() : null;
+  addrEl.textContent = account
+    ? 'กระเป๋า: ' + account.slice(0, 6) + '...' + account.slice(-4)
+    : 'ยังไม่ได้เชื่อมต่อกระเป๋า';
+  addrEl.title = account || '';
+  addrEl.className = account ? '' : 'off';
+  connectBtn.textContent = account ? 'เชื่อมต่อแล้ว' : 'Connect Wallet';
+  connectBtn.disabled = !!account;
+}
+
+function resetBlockchainState() {
+  account = null;
+  provider = null;
+  signer = null;
+  game = null;
+  showConnectedAddress(null);
+  initialBtn.disabled = false;
+  initialBtn.textContent = 'รับ 10 SMOON ครั้งแรก';
+}
+
+async function initBlockchain() {
+  if (!window.ethereum) throw new Error('ไม่พบ MetaMask กรุณาติดตั้งส่วนขยายก่อน');
+
+  const chainId = await rpc('eth_chainId');
+  if (chainId.toLowerCase() !== BSC_TESTNET_CHAIN_ID) {
+    throw new Error('กรุณาเปลี่ยนเครือข่ายเป็น BNB Smart Chain Testnet');
+  }
+
+  const accounts = await rpc('eth_accounts');
+  if (!accounts.length) throw new Error('กรุณา Connect Wallet ก่อน');
+
+  provider = window.ethereum;
+  signer = accounts[0];
+  game = true;
+  showConnectedAddress(accounts[0]);
+  return true;
+}
+
+async function ensureBlockchain() {
+
+  if (GAME_CONTRACT === "0x0000000000000000000000000000000000000000" || SMOON_CONTRACT === "0x0000000000000000000000000000000000000000") {
+    throw new Error('ยังไม่ได้ตั้งค่า Contract Address: แก้ GAME_CONTRACT และ SMOON_CONTRACT ใน index.html ก่อนใช้ระบบรางวัล');
+  }
+  if (!window.ethereum) throw new Error('ไม่พบ MetaMask กรุณาติดตั้งส่วนขยายก่อน');
+
+  const accounts = await rpc('eth_accounts');
+  if (!accounts.length) {
+    resetBlockchainState();
+    throw new Error('กรุณา Connect Wallet ก่อน');
+  }
+
+  const chainId = await rpc('eth_chainId');
+  if (chainId.toLowerCase() !== BSC_TESTNET_CHAIN_ID) {
+    throw new Error('กรุณาเปลี่ยนเครือข่ายเป็น BNB Smart Chain Testnet');
+  }
+
+  provider = window.ethereum;
+  signer = accounts[0];
+  game = true;
+  showConnectedAddress(accounts[0]);
+  return true;
+}
+
+function setAccount(a) {
+  if (!a) {
+    resetBlockchainState();
+    return;
+  }
+  showConnectedAddress(a);
+}
+
+async function connectWallet() {
+  if (!window.ethereum) {
+    resetBlockchainState();
+    addrEl.textContent = 'ไม่พบ MetaMask กรุณาติดตั้งส่วนขยายก่อน';
+    return;
+  }
+
+  try {
+    const accounts = await rpc('eth_requestAccounts');
+    if (!accounts.length) throw new Error('กรุณา Connect Wallet ก่อน');
+    await initBlockchain();
+    msg.textContent = 'เชื่อมต่อ Wallet สำเร็จ';
+  } catch (e) {
+    console.log(e);
+    game = null;
+    signer = null;
+    provider = null;
+    const text = errorText(e);
+    if (e?.code === 4001) {
+      addrEl.textContent = 'ผู้ใช้ยกเลิกการเชื่อมต่อ';
+    } else {
+      addrEl.textContent = text || 'เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง';
+    }
+    addrEl.className = 'off';
+    connectBtn.textContent = 'Connect Wallet';
+    connectBtn.disabled = false;
+  }
+}
+
+connectBtn.onclick = connectWallet;
+
+if (window.ethereum) {
+  window.ethereum.request({ method: 'eth_accounts' }).then(async (accounts) => {
+    if (!accounts.length) return;
+    try {
+      await initBlockchain();
+      msg.textContent = 'เชื่อมต่อ Wallet สำเร็จ';
+    } catch (e) {
+      console.log(e);
+      setAccount(accounts[0]);
+      msg.textContent = errorText(e) || 'กรุณาตรวจสอบเครือข่าย';
+    }
+  }).catch(() => {});
+
+  if (window.ethereum.on) {
+    window.ethereum.on('accountsChanged', async (accounts) => {
+      // เปลี่ยนบัญชีหรือกด Disconnect ใน MetaMask -> รีเซ็ตเกมและกลับหน้าเริ่มต้นทันที
+      goHome();
+
+      if (!accounts.length) {
+        resetBlockchainState();
+        msg.textContent = 'ยกเลิกการเชื่อมต่อ Wallet แล้ว';
+        return;
+      }
+
+      try {
+        await initBlockchain();
+        msg.textContent = 'เปลี่ยน Wallet สำเร็จ กลับหน้าเริ่มต้นแล้ว';
+      } catch (e) {
+        console.log(e);
+        resetBlockchainState();
+        msg.textContent = errorText(e) || 'ไม่สามารถเชื่อมต่อ Wallet นี้ได้';
+      }
+    });
+
+    window.ethereum.on('chainChanged', async () => {
+      // เปลี่ยนเครือข่ายก็รีเซ็ตเกมเพื่อป้องกัน state ของเกมค้างกับเครือข่ายเดิม
+      goHome();
+      try {
+        await initBlockchain();
+        msg.textContent = 'เปลี่ยนเครือข่ายสำเร็จ กลับหน้าเริ่มต้นแล้ว';
+      } catch (e) {
+        console.log(e);
+        resetBlockchainState();
+        msg.textContent = errorText(e) || 'กรุณาใช้ BNB Smart Chain Testnet';
+      }
+    });
+  }
+}
+
+/* ---------- ควบคุมเกม ---------- */
+async function begin() {
+  msg.textContent = '';
+  if (!micOn) {
+    try { await startMic(); }
+    catch (e) {
+      msg.textContent = 'ใช้ไมโครโฟนไม่ได้ กรุณาอนุญาตการใช้ไมค์ แล้วกดเริ่มเล่นอีกครั้ง';
+      return;
+    }
+  }
+  if (micOn && !calibrated) {
+    state = 'calib'; calibT = 0; calibSum = 0; calibN = 0;
+    ovTitle.textContent = 'กำลังฟังเสียงรอบตัว';
+    ovText.textContent = 'เงียบสักครู่...';
+    how.style.display = 'none'; ovBtn.style.display = 'none';
+  } else startRun();
+}
+function startRun() {
+  obs = []; dist = 0; passed = 0; score = 0; gap = 400;
+  P.z = 0; P.vz = 0; P.ground = true;
+  state = 'play';
+  ov.classList.add('hide');
+  initialBtn.style.display = 'none';
+  rewardBox.style.display = 'none';
+  rewardMsg.textContent = '';
+  claimBtn.disabled = false;
+  skipBtn.disabled = false;
+}
+function gameOver() {
+  state = 'over';
+  const newBest = score > best;
+  if (newBest) { best = score; try { localStorage.setItem('shout_hero_best', best); } catch (e) {} }
+  ovTitle.textContent = 'เกมโอเวอร์';
+  ovText.textContent = 'คะแนน ' + score + (newBest ? ' เป็นสถิติใหม่!' : ' สูงสุด ' + best);
+  how.style.display = 'none';
+  ovBtn.style.display = 'none';
+  initialBtn.style.display = 'none';
+  ov.classList.remove('hide');
+  finalScore.textContent = score;
+  gameReward = score;
+  rewardAmount.textContent = gameReward + ' SMOON';
+  rewardBox.style.display = 'block';
+  rewardMsg.textContent = '';
+  claimBtn.disabled = false;
+  skipBtn.disabled = false;
+}
+initialBtn.onclick = async () => {
+  try {
+    initialBtn.disabled = true;
+    msg.textContent = 'กำลังตรวจสอบ Wallet...';
+
+    await ensureBlockchain();
+
+    const raw = await callGame(SELECTOR.hasClaimedInitial + encodeAddress(account));
+    const alreadyClaimed = decodeBool(raw);
+
+    if (alreadyClaimed) {
+      initialBtn.textContent = 'รับไปแล้ว';
+      msg.textContent = 'Wallet นี้เคยรับ 10 SMOON ไปแล้ว';
+      return;
+    }
+
+    msg.textContent = 'กำลังรับ 10 SMOON... กรุณายืนยัน Transaction ใน MetaMask';
+    const txHash = await sendGame(SELECTOR.claimInitial);
+    msg.textContent = 'กำลังยืนยัน Transaction...';
+    await waitForTransaction(txHash);
+
+    initialBtn.textContent = 'รับ 10 SMOON แล้ว';
+    msg.textContent = 'ได้รับ 10 SMOON แล้ว ตรวจสอบใน MetaMask ได้เลย';
+  } catch (e) {
+    console.log(e);
+    const text = errorText(e);
+
+    if (text.includes('Already claimed')) {
+      initialBtn.textContent = 'รับไปแล้ว';
+      msg.textContent = 'Wallet นี้เคยรับ 10 SMOON ไปแล้ว';
+    } else if (e?.code === 4001 || text.toLowerCase().includes('user rejected')) {
+      msg.textContent = 'ยกเลิกการรับเหรียญ';
+    } else {
+      msg.textContent = 'รับเหรียญไม่สำเร็จ: ' + (text || 'ลองใหม่อีกครั้ง');
+    }
+  } finally {
+    if (initialBtn.textContent !== 'รับ 10 SMOON แล้ว' && initialBtn.textContent !== 'รับไปแล้ว') {
+      initialBtn.disabled = false;
+    }
+  }
+};
+
+ovBtn.onclick = begin;
+
+/* ---------- Claim Reward: 1 Transaction ---------- */
+claimBtn.onclick = async () => {
+  try {
+    claimBtn.disabled = true;
+    skipBtn.disabled = true;
+    rewardMsg.textContent = 'กำลังเตรียม Claim Reward...';
+
+    await ensureBlockchain();
+
+    const scoreToClaim = Number(gameReward);
+    if (!Number.isInteger(scoreToClaim) || scoreToClaim <= 0) {
+      throw new Error('คะแนนเป็น 0 จึงไม่มี Reward');
+    }
+    if (scoreToClaim > 100) {
+      throw new Error('คะแนนเกิน 100');
+    }
+
+    // claimReward(uint256 score) เป็นธุรกรรมเดียว
+    const data = SELECTOR.claimReward + encodeUint(scoreToClaim);
+
+    rewardMsg.textContent = 'กำลังส่ง Transaction Claim Reward...';
+    // ไม่กำหนด gas เอง ให้ MetaMask ประเมิน gas limit จาก transaction จริง
+    const txHash = await sendGame(data);
+    await waitForTransaction(txHash);
+
+    rewardMsg.textContent = 'Claim สำเร็จ! ได้รับ ' + scoreToClaim + ' SMOON แล้ว';
+    setTimeout(() => goHome(), 1200);
+  } catch (err) {
+    console.log(err);
+    const text = errorText(err);
+    if (text.includes('Contract reward balance too low')) {
+      rewardMsg.textContent = 'Claim ไม่สำเร็จ: SMOON ใน Contract ไม่พอสำหรับรางวัล';
+    } else if (text.includes('Score must be greater than 0')) {
+      rewardMsg.textContent = 'คะแนนเป็น 0 จึงไม่มี Reward';
+    } else if (text.includes('Score too high')) {
+      rewardMsg.textContent = 'คะแนนเกินกำหนดของ Contract';
+    } else if (text.toLowerCase().includes('gas limit too high')) {
+      rewardMsg.textContent = 'RPC ปฏิเสธ Gas Limit ที่ MetaMask ประเมิน';
+    } else if (err?.code === 4001 || text.toLowerCase().includes('user rejected')) {
+      rewardMsg.textContent = 'ยกเลิก Transaction';
+    } else {
+      rewardMsg.textContent = 'Claim ไม่สำเร็จ: ' + (text || 'ลองใหม่อีกครั้ง');
+    }
+    claimBtn.disabled = false;
+    skipBtn.disabled = false;
+  }
+};
+
+function goHome() {
+  state = 'ready';
+  obs = [];
+  dist = 0;
+  passed = 0;
+  score = 0;
+  gameReward = 0;
+  P.z = 0;
+  P.vz = 0;
+  P.ground = true;
+
+  ov.classList.remove('hide');
+  ovTitle.textContent = 'Scream to Moon';
+  ovText.textContent = 'ใช้เสียงของคุณบังคับฮีโร่ให้วิ่งข้ามสิ่งกีดขวางให้ได้ไกลที่สุด';
+  how.style.display = '';
+  ovBtn.style.display = '';
+  ovBtn.textContent = 'เริ่มเล่น';
+  initialBtn.style.display = '';
+  delete skipBtn.dataset.confirm;
+  rewardBox.style.display = 'none';
+  rewardMsg.textContent = '';
+  msg.textContent = '';
+  claimBtn.disabled = false;
+  skipBtn.disabled = false;
+  skipBtn.textContent = 'ไม่รับรางวัล';
+}
+
+skipBtn.onclick = () => {
+  if (skipBtn.dataset.confirm === 'yes') {
+    delete skipBtn.dataset.confirm;
+    goHome();
+    return;
+  }
+
+  skipBtn.dataset.confirm = 'yes';
+  skipBtn.textContent = 'ยืนยันอีกครั้ง';
+  claimBtn.disabled = true;
+  rewardMsg.textContent = 'ยืนยันอีกครั้งว่าจะไม่รับรางวัลจากเกมนี้';
+};
+
+function spawn() {
+  const t = Math.floor(Math.random() * 3);
+  let o;
+  if (t === 0) o = { type: 'rock', w: 44 + Math.random() * 14, h: 40 + Math.random() * 16 };
+  else if (t === 1) o = { type: 'crate', w: 46, h: 46 + Math.floor(Math.random() * 2) * 22 };
+  else o = { type: 'spike', w: 66 + Math.random() * 24, h: 30 };
+  o.x = W + 30; o.passed = false;
+  obs.push(o);
+  gap = 380 + Math.random() * 200;
+}
+
+function update(dt) {
+  const tgt = targetLevel();
+  level += (tgt - level) * (tgt > level ? 0.5 : 0.12);
+
+  if (state === 'calib') {
+    calibT += dt; calibSum += rms; calibN++;
+    if (calibT > 1.2) {
+      noise = Math.max(0.004, (calibSum / calibN) * 1.25);
+      calibrated = true;
+      startRun();
+    }
+    return;
+  }
+  if (state !== 'play') { moving = false; return; }
+
+  const base = 240 + Math.min(170, dist / 30);
+  let move = 0;
+  if (P.ground) {
+    if (level >= T_JUMP) { P.vz = 820; P.ground = false; airSpeed = base; move = base; }
+    else if (level >= T_WALK) move = base;
+  } else move = airSpeed;
+
+  if (!P.ground) {
+    P.vz -= 2200 * dt;
+    P.z += P.vz * dt;
+    if (P.z <= 0) { P.z = 0; P.vz = 0; P.ground = true; }
+  }
+  moving = move > 0;
+  dist += move * dt;
+
+  for (const o of obs) {
+    o.x -= move * dt;
+    if (!o.passed && o.x + o.w < P.x) { o.passed = true; passed++; }
+  }
+  obs = obs.filter(o => o.x + o.w > -30);
+  if (!obs.length || obs[obs.length - 1].x < W - gap) spawn();
+  score = passed * 10 + Math.floor(dist / 25);
+
+  const px = P.x + 7, pw = P.w - 14, pTop = GROUND - P.z - P.h + 6, pBot = GROUND - P.z;
+  for (const o of obs) {
+    const hh = o.type === 'spike' ? o.h * 0.75 : o.h;
+    const ox = o.x + 4, ow = o.w - 8, oTop = GROUND - hh;
+    if (px < ox + ow && px + pw > ox && pBot > oTop && pTop < GROUND) { gameOver(); return; }
+  }
+}
+
+function targetLevel() {
+  let t = 0;
+  if (micOn) {
+    rms = readRms();
+    t = Math.max(0, rms - noise) / (0.28 / +sens.value);
+  }
+  return Math.min(1, t);
+}
+
+/* ---------- วาดภาพ ---------- */
+function hills(off, color, base, amp, f) {
+  c.fillStyle = color;
+  c.beginPath(); c.moveTo(0, H);
+  for (let x = 0; x <= W; x += 12) {
+    const y = base - (Math.sin((x + off) * f) + Math.sin((x + off) * f * 2.3) * 0.5) * amp * 0.6;
+    c.lineTo(x, y);
+  }
+  c.lineTo(W, H); c.closePath(); c.fill();
+}
+
+function drawHero(t) {
+  const x = P.x, y = GROUND - P.z - P.h;
+  const step = moving && P.ground ? Math.sin(dist * 0.09) * 7 : 0;
+  // ขา
+  c.fillStyle = '#2b1c57';
+  c.fillRect(x + 8 + step, y + P.h - 12, 10, 12);
+  c.fillRect(x + 22 - step, y + P.h - 12, 10, 12);
+  // ผ้าพันคอ
+  const wv = Math.sin(t / 90) * 4 * (moving ? 1.5 : 0.5);
+  c.fillStyle = '#ff7a59';
+  c.beginPath();
+  c.moveTo(x + 6, y + 20); c.lineTo(x - 22, y + 16 + wv);
+  c.lineTo(x - 18, y + 28 + wv); c.lineTo(x + 8, y + 30); c.closePath(); c.fill();
+  // ตัว
+  c.fillStyle = '#ffd166';
+  c.beginPath(); c.roundRect(x, y, P.w, P.h - 10, 14); c.fill();
+  c.fillStyle = '#ff7a59'; c.fillRect(x + 2, y + 20, P.w - 4, 8);
+  // ตา
+  c.fillStyle = '#1b1740';
+  c.beginPath(); c.arc(x + 25, y + 11, 3.2, 0, 7); c.arc(x + 34, y + 11, 3.2, 0, 7); c.fill();
+  // ปาก เปิดตามความดังของเสียง
+  const m = 2 + level * 9;
+  c.beginPath(); c.ellipse(x + 29, y + 17 + m / 4, 4, m / 2, 0, 0, 7); c.fill();
+}
+
+function drawObs(o) {
+  const y = GROUND;
+  if (o.type === 'rock') {
+    c.fillStyle = '#e8e0ff';
+    c.beginPath(); c.moveTo(o.x, y); c.lineTo(o.x + o.w * .15, y - o.h * .7);
+    c.lineTo(o.x + o.w * .5, y - o.h); c.lineTo(o.x + o.w * .9, y - o.h * .6); c.lineTo(o.x + o.w, y);
+    c.closePath(); c.fill();
+  } else if (o.type === 'crate') {
+    c.fillStyle = '#e0a03a'; c.fillRect(o.x, y - o.h, o.w, o.h);
+    c.strokeStyle = '#7a4a12'; c.lineWidth = 3;
+    c.strokeRect(o.x + 1.5, y - o.h + 1.5, o.w - 3, o.h - 3);
+    c.beginPath(); c.moveTo(o.x, y - o.h); c.lineTo(o.x + o.w, y); c.stroke();
+  } else {
+    c.fillStyle = '#ffffff';
+    const n = Math.round(o.w / 22), sw = o.w / n;
+    for (let i = 0; i < n; i++) {
+      c.beginPath(); c.moveTo(o.x + i * sw, y); c.lineTo(o.x + i * sw + sw / 2, y - o.h); c.lineTo(o.x + (i + 1) * sw, y); c.fill();
+    }
+  }
+}
+
+function draw(t) {
+  const g = c.createLinearGradient(0, 0, 0, GROUND);
+  g.addColorStop(0, '#1b1740'); g.addColorStop(.6, '#4a2a6b'); g.addColorStop(1, '#ff7a59');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#ffffffaa';
+  for (const s of stars) { c.beginPath(); c.arc(s.x, s.y, s.r, 0, 7); c.fill(); }
+  c.fillStyle = '#ffd166'; c.beginPath(); c.arc(700, GROUND - 70, 54, 0, 7); c.fill();
+  hills(dist * 0.1, '#3a2468', GROUND - 60, 40, 0.008);
+  hills(dist * 0.25, '#2b1c57', GROUND - 20, 30, 0.013);
+  c.fillStyle = '#23204d'; c.fillRect(0, GROUND, W, H - GROUND);
+  c.fillStyle = '#3ddc97'; c.fillRect(0, GROUND, W, 6);
+  c.fillStyle = '#3a3577';
+  for (let x = -(dist % 60); x < W; x += 60) c.fillRect(x, GROUND + 26, 28, 4);
+
+  obs.forEach(drawObs);
+  drawHero(t);
+
+  c.textBaseline = 'top';
+  c.fillStyle = '#f6f1ff'; c.font = '600 28px Kanit, sans-serif'; c.textAlign = 'left';
+  c.fillText('คะแนน ' + score, 20, 14);
+  c.fillStyle = '#b9b0dc'; c.font = '400 20px Kanit, sans-serif'; c.textAlign = 'right';
+  c.fillText('สูงสุด ' + best, W - 20, 18);
+
+  // มิเตอร์เสียง
+  fill.style.width = (level * 100) + '%';
+  const st = level >= T_JUMP ? 'jump' : level >= T_WALK ? 'walk' : '';
+  fill.className = st;
+  stateEl.textContent = st === 'jump' ? 'ดังมาก: กระโดด!' : st === 'walk' ? 'ดังปานกลาง: เดินหน้า' : 'เงียบ: หยุดอยู่';
+}
+
+let last = 0;
+function frame(t) {
+  const dt = Math.min(0.033, (t - last) / 1000 || 0);
+  last = t;
+  update(dt);
+  draw(t);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
